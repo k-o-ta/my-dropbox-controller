@@ -1,0 +1,12 @@
+[package]
+name = "my-dropbox-controller"
+version = "0.1.0"
+authors = ["Koji Ota <afterjnih@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+structopt = "0.3.13"
+anyhow = "1.0"
+thiserror = "1.0"
