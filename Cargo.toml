@@ -11,3 +11,6 @@ structopt = "0.3.13"
 anyhow = "1.0"
 thiserror = "1.0"
 kamadak-exif = "0.5"
+mp4 = { git = "https://github.com/k-o-ta/mp4-rust.git", branch = "skip-TrakBox" }
+chrono = "0.4"
+chrono-tz = "0.5.3"

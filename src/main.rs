@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use my_dropbox_controller::extension::Extension;
-use my_dropbox_controller::meta::get_datetime;
+use my_dropbox_controller::meta::{get_datetime, get_mp4_datetime};
 use std::fmt;
 use std::str::FromStr;
 use structopt::StructOpt;
@@ -38,7 +38,8 @@ fn main() -> Result<()> {
             println!("{:?}", get_datetime(path.as_path()));
         }
         Extension::Mp4 => {
-            println!("mov")
+            println!("mov");
+            println!("{:?}", get_mp4_datetime(path.as_path()));
         }
     }
     // let e = Extension::from_str(ext)?;
