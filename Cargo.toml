@@ -14,3 +14,5 @@ kamadak-exif = "0.5"
 mp4 = { git = "https://github.com/k-o-ta/mp4-rust.git", branch = "skip-TrakBox" }
 chrono = "0.4"
 chrono-tz = "0.5.3"
+ring = "0.16.19"
+data-encoding = "2.3.1"
