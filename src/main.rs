@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use data_encoding::HEXUPPER;
-use my_dropbox_controller::digest::sha_256_digest;
+use my_dropbox_controller::digest::{dpx_digest, sha_256_digest};
+use my_dropbox_controller::dropbox::{get_file_metadata, list_directory};
 use my_dropbox_controller::extension::Extension;
 use my_dropbox_controller::meta::{get_datetime, get_mp4_datetime};
 use std::fmt;
@@ -44,15 +45,25 @@ fn main() -> Result<()> {
     match ext {
         Extension::Jpeg => {
             println!("pic");
-            println!("{:?}", get_datetime(buff));
+            println!("{:?}", get_datetime(&mut buff));
+            get_file_metadata(&format!(
+                "/ファミリー ルーム/写真/{}",
+                path.to_str().unwrap()
+            ));
         }
         Extension::Mp4 => {
             println!("mov");
-            println!("{:?}", get_mp4_datetime(&mut file));
-            file.seek(SeekFrom::Start(0))?;
+            println!("{:?}", get_mp4_datetime(&mut buff));
+            buff.seek(SeekFrom::Start(0))?;
+            get_file_metadata(&format!(
+                "/ファミリー ルーム/動画/{}",
+                path.to_str().unwrap()
+            ));
         }
     }
     println!("digest: {:?}", HEXUPPER.encode(digest.unwrap().as_ref()));
+    println!("dpx_digest: {:?}", dpx_digest(&mut buff));
+    // list_directory("/");
     // let e = Extension::from_str(ext)?;
     // match Extension::from_str(ext)? {
     //     Extension::Jpeg => {

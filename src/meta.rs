@@ -17,7 +17,7 @@ enum MetaError {
     ParseDateTimeError(String),
 }
 
-pub fn get_datetime<R: Read + Seek + BufRead>(mut reader: R) -> Result<ChronoDateTime<Tz>> {
+pub fn get_datetime<R: Read + Seek + BufRead>(mut reader: &mut R) -> Result<ChronoDateTime<Tz>> {
     let exif = Reader::new().read_from_container(&mut reader)?;
     let date_time = exif
         .get_field(Tag::DateTime, In::PRIMARY)
@@ -35,9 +35,9 @@ pub fn get_datetime<R: Read + Seek + BufRead>(mut reader: R) -> Result<ChronoDat
     Ok(dt.with_timezone(&Tokyo))
 }
 
-pub fn get_mp4_datetime(file: &mut File) -> Result<ChronoDateTime<Tz>> {
+pub fn get_mp4_datetime(reader: &mut BufReader<&File>) -> Result<ChronoDateTime<Tz>> {
+    let file = reader.get_ref();
     let size = file.metadata()?.len();
-    let reader = BufReader::new(file);
 
     let mp4 = mp4::Mp4Reader::read_header(reader, size)?;
     // let mp4 = mp4::Mp4Reader::read_header(reader, 4)?;
@@ -47,6 +47,6 @@ pub fn get_mp4_datetime(file: &mut File) -> Result<ChronoDateTime<Tz>> {
     let dt = Utc.timestamp(creation_time(mp4.moov.mvhd.modification_time) as i64, 0);
     let dt2 = dt.with_timezone(&Tokyo);
 
-    // seek(SeekFrom::Start(0))?;
+    // reader.seek(SeekFrom::Start(0))?;
     Ok(dt2)
 }
