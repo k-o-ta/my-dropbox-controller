@@ -421,6 +421,7 @@ dependencies = [
  "dropbox-sdk",
  "kamadak-exif",
  "mp4",
+ "parallel_reader",
  "ring",
  "rusqlite",
  "structopt",
@@ -532,6 +533,12 @@ dependencies = [
  "pkg-config",
  "vcpkg",
 ]
+
+[[package]]
+name = "parallel_reader"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca035acf8d608c9147f5164bd080414c919632562869137f89db9c7174376b65"
 
 [[package]]
 name = "parse-zoneinfo"

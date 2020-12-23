@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use data_encoding::HEXUPPER;
 use my_dropbox_controller::digest::{dpx_digest, sha_256_digest};
-use my_dropbox_controller::dropbox::{get_file_metadata, list_directory};
+use my_dropbox_controller::dropbox::{get_file_metadata, list_directory, upload_file};
 use my_dropbox_controller::extension::Extension;
 use my_dropbox_controller::meta::{get_datetime, get_mp4_datetime};
 use my_dropbox_controller::sqlite::reset_db;
@@ -65,6 +65,8 @@ fn main() -> Result<()> {
     println!("digest: {:?}", HEXUPPER.encode(digest.unwrap().as_ref()));
     println!("dpx_digest: {:?}", dpx_digest(&mut buff));
     println!("{:?}", reset_db("my-dropbox.db3"));
+    let mut source_file = File::open("my-dropbox.db3")?;
+    upload_file(source_file, "/my-dropbox2.db3".to_string())?;
     // list_directory("/");
     // let e = Extension::from_str(ext)?;
     // match Extension::from_str(ext)? {

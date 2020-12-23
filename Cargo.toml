@@ -17,6 +17,7 @@ chrono-tz = "0.5.3"
 ring = "0.16.19"
 data-encoding = "2.3.1"
 dropbox-content-hasher = "0.3.0"
+parallel_reader = "0.1.1"
 
 [dependencies.dropbox-sdk]
 version = "*"
