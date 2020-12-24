@@ -9,6 +9,11 @@ use std::env;
 use std::fs::File;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc::Sender;
+use {
+    crate::sqlite::Message,
+    dropbox_sdk::files::{FileMetadata, ListFolderResult, Metadata},
+};
 
 /// How many blocks to upload in parallel.
 const PARALLELISM: usize = 20;
@@ -16,6 +21,125 @@ const PARALLELISM: usize = 20;
 /// The size of a block. This is a Dropbox constant, not adjustable.
 const BLOCK_SIZE: usize = 4 * 1024 * 1024;
 
+pub fn list_directory2(path: &str, tx: Sender<Message>) {
+    let client = UserAuthDefaultClient::new(get_oauth2_token());
+    let requested_path = if path == "/" {
+        String::new()
+    } else {
+        path.to_owned()
+    };
+    let mut count = 0;
+    match files::list_folder(
+        &client,
+        &files::ListFolderArg::new(requested_path).with_recursive(false),
+    ) {
+        Ok(Ok(ListFolderResult {
+            entries,
+            mut cursor,
+            has_more,
+            ..
+        })) => {
+            let tx2 = tx.clone();
+            tokio::spawn(async move {
+                for meta in entries {
+                    match meta {
+                        Metadata::File(FileMetadata {
+                            name, content_hash, ..
+                        }) => match content_hash {
+                            Some(hash) => {
+                                tx2.send(Message::Progress(name, hash)).await;
+                            }
+                            None => {
+                                tx2.send(Message::Abort(format!(
+                                    "content hash was empty: {}",
+                                    name
+                                )))
+                                .await;
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+                if !has_more {
+                    tx2.send(Message::Finish).await;
+                }
+            });
+
+            if !has_more {
+                return;
+            }
+            let mut new_cursor = cursor;
+
+            loop {
+                println!("fetch count: {}", count);
+                match files::list_folder_continue(
+                    &client,
+                    &files::ListFolderContinueArg::new(new_cursor),
+                ) {
+                    Ok(Ok(ListFolderResult {
+                        entries,
+                        mut cursor,
+                        has_more,
+                        ..
+                    })) => {
+                        new_cursor = cursor;
+                        let tx2 = tx.clone();
+                        tokio::spawn(async move {
+                            for meta in entries {
+                                match meta {
+                                    Metadata::File(FileMetadata {
+                                        name, content_hash, ..
+                                    }) => match content_hash {
+                                        Some(hash) => {
+                                            tx2.send(Message::Progress(name, hash)).await;
+                                        }
+                                        None => {
+                                            tx2.send(Message::Abort(format!(
+                                                "content hash was empty: {}",
+                                                name
+                                            )))
+                                            .await;
+                                            return;
+                                        }
+                                    },
+                                    _ => {}
+                                }
+                            }
+                            if !has_more {
+                                tx2.send(Message::Finish).await;
+                                return;
+                            }
+                        });
+                        if !has_more {
+                            return;
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        println!("{}", e);
+                        tx.send(Message::Abort(format!("request failure: {}", e)));
+                        return;
+                    }
+                    Err(e) => {
+                        println!("{}", e);
+                        tx.send(Message::Abort(format!("request failure: {}", e)));
+                        return;
+                    }
+                }
+                // cursor = "1".to_string();
+                count = count + 1;
+            }
+            // println!("{:?}", result);
+        }
+        Ok(Err(e)) => {
+            println!("{}", e);
+            tx.send(Message::Abort(format!("request failure: {}", e)));
+        }
+        Err(e) => {
+            println!("{}", e);
+            tx.send(Message::Abort(format!("request failure: {}", e)));
+        }
+    };
+}
 pub fn list_directory(path: &str) {
     let client = UserAuthDefaultClient::new(get_oauth2_token());
     let requested_path = if path == "/" {
@@ -57,7 +181,7 @@ pub fn get_file_metadata(path: &str) {
     };
 }
 
-fn get_oauth2_token() -> String {
+pub fn get_oauth2_token() -> String {
     env::var("DBX_OAUTH_TOKEN").unwrap()
 }
 

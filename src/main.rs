@@ -14,9 +14,24 @@ use thiserror::Error;
 
 #[derive(StructOpt)]
 struct Cli {
-    pattern: String,
-    #[structopt(parse(from_os_str))]
-    path: std::path::PathBuf,
+    #[structopt(subcommand)]
+    sub: Sub,
+}
+
+#[derive(StructOpt)]
+enum Sub {
+    #[structopt(name = "reset-db", about = "reset db")]
+    ResetDb,
+    #[structopt(name = "upload", about = "upload pictures")]
+    Upload {
+        #[structopt(parse(from_os_str))]
+        path: std::path::PathBuf,
+    },
+    #[structopt(name = "meta", about = "get metadata of file")]
+    Meta {
+        #[structopt(parse(from_os_str))]
+        path: std::path::PathBuf,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -27,46 +42,53 @@ enum MyError {
     InvalidExtensionString(String),
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Cli::from_args();
-    let path = args.path;
-    let ext = Extension::from_str(
-        path.extension()
-            .ok_or(MyError::InvalidPathError("invalid path".to_string()))
-            .and_then(|ext| {
-                ext.to_str()
-                    .ok_or(MyError::InvalidExtensionString(format!("{:?}", path)))
-            })?,
-    )?;
-    let mut file =
-        File::open(&path).with_context(|| format!("failed to open file: {:?}", path.to_str()))?;
-    let mut buff = BufReader::new(&file);
-    let digest = sha_256_digest(&mut buff);
-    // sha_256_digest2(&file);
-    match ext {
-        Extension::Jpeg => {
-            println!("pic");
-            println!("{:?}", get_datetime(&mut buff));
-            // get_file_metadata(&format!(
-            //     "/ファミリー ルーム/写真/{}",
-            //     path.to_str().unwrap()
-            // ));
+    match args.sub {
+        ResetDb => {
+            println!("{:?}", reset_db("my-dropbox.db3").await);
+            let mut source_file = File::open("my-dropbox.db3")?;
+            upload_file(source_file, "/my-dropbox2.db3".to_string())?;
         }
-        Extension::Mp4 => {
-            println!("mov");
-            println!("{:?}", get_mp4_datetime(&mut buff));
-            buff.seek(SeekFrom::Start(0))?;
-            // get_file_metadata(&format!(
-            //     "/ファミリー ルーム/動画/{}",
-            //     path.to_str().unwrap()
-            // ));
+        Upload => {}
+        Sub::Meta { path } => {
+            let ext = Extension::from_str(
+                path.extension()
+                    .ok_or(MyError::InvalidPathError("invalid path".to_string()))
+                    .and_then(|ext| {
+                        ext.to_str()
+                            .ok_or(MyError::InvalidExtensionString(format!("{:?}", path)))
+                    })?,
+            )?;
+            let mut file = File::open(&path)
+                .with_context(|| format!("failed to open file: {:?}", path.to_str()))?;
+            let mut buff = BufReader::new(&file);
+            let digest = sha_256_digest(&mut buff);
+            // sha_256_digest2(&file);
+            match ext {
+                Extension::Jpeg => {
+                    println!("pic");
+                    println!("{:?}", get_datetime(&mut buff));
+                    // get_file_metadata(&format!(
+                    //     "/ファミリー ルーム/写真/{}",
+                    //     path.to_str().unwrap()
+                    // ));
+                }
+                Extension::Mp4 => {
+                    println!("mov");
+                    println!("{:?}", get_mp4_datetime(&mut buff));
+                    buff.seek(SeekFrom::Start(0))?;
+                    // get_file_metadata(&format!(
+                    //     "/ファミリー ルーム/動画/{}",
+                    //     path.to_str().unwrap()
+                    // ));
+                }
+            }
+            println!("digest: {:?}", HEXUPPER.encode(digest.unwrap().as_ref()));
+            println!("dpx_digest: {:?}", dpx_digest(&mut buff));
         }
-    }
-    println!("digest: {:?}", HEXUPPER.encode(digest.unwrap().as_ref()));
-    println!("dpx_digest: {:?}", dpx_digest(&mut buff));
-    println!("{:?}", reset_db("my-dropbox.db3"));
-    let mut source_file = File::open("my-dropbox.db3")?;
-    upload_file(source_file, "/my-dropbox2.db3".to_string())?;
+    };
     // list_directory("/");
     // let e = Extension::from_str(ext)?;
     // match Extension::from_str(ext)? {
