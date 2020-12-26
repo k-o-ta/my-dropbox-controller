@@ -1,3 +1,4 @@
+use crate::extension::Extension;
 use anyhow::{Context, Result};
 use chrono::DateTime as ChronoDateTime;
 use chrono::{NaiveDateTime, TimeZone, Utc};
@@ -17,8 +18,20 @@ enum MetaError {
     ParseDateTimeError(String),
 }
 
-pub fn get_datetime<R: Read + Seek + BufRead>(mut reader: &mut R) -> Result<ChronoDateTime<Tz>> {
-    let exif = Reader::new().read_from_container(&mut reader)?;
+pub fn datetime(path: &Path) -> Result<ChronoDateTime<Tz>> {
+    let ext = Extension::from_path(&path)?;
+    let mut file =
+        File::open(&path).with_context(|| format!("failed to open file: {:?}", path.to_str()))?;
+    let mut buff = BufReader::new(&file);
+    match ext {
+        Extension::Jpeg => get_datetime(&mut buff),
+        Extension::Mp4 => get_mp4_datetime(&mut buff),
+        Other => Err(anyhow::anyhow!("no datetime for non image file")),
+    }
+    // reader: &mut BufReader<&File>
+}
+pub fn get_datetime(reader: &mut BufReader<&File>) -> Result<ChronoDateTime<Tz>> {
+    let exif = Reader::new().read_from_container(reader)?;
     let date_time = exif
         .get_field(Tag::DateTime, In::PRIMARY)
         .with_context(|| format!("date tiem doesn't exist"))?;

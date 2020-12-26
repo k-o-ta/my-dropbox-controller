@@ -1,3 +1,4 @@
+pub mod calc;
 pub mod digest;
 pub mod dropbox;
 pub mod extension;

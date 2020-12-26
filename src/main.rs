@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use data_encoding::HEXUPPER;
+use my_dropbox_controller::calc::{calc, sort_calc};
 use my_dropbox_controller::digest::{dpx_digest, sha_256_digest};
 use my_dropbox_controller::dropbox::{get_file_metadata, list_directory, upload_file};
 use my_dropbox_controller::extension::Extension;
@@ -8,6 +9,7 @@ use my_dropbox_controller::sqlite::reset_db;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::path::Path;
 use std::str::FromStr;
 use structopt::StructOpt;
 use thiserror::Error;
@@ -32,6 +34,11 @@ enum Sub {
         #[structopt(parse(from_os_str))]
         path: std::path::PathBuf,
     },
+    #[structopt(name = "test", about = "test")]
+    Test {
+        #[structopt(parse(from_os_str))]
+        path: std::path::PathBuf,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -46,13 +53,17 @@ enum MyError {
 async fn main() -> Result<()> {
     let args = Cli::from_args();
     match args.sub {
-        ResetDb => {
+        Sub::ResetDb => {
+            println!("resetDB");
             println!("{:?}", reset_db("my-dropbox.db3").await);
             let mut source_file = File::open("my-dropbox.db3")?;
             upload_file(source_file, "/my-dropbox2.db3".to_string())?;
         }
-        Upload => {}
+        Sub::Upload { path } => {
+            println!("upload");
+        }
         Sub::Meta { path } => {
+            println!("meta");
             let ext = Extension::from_str(
                 path.extension()
                     .ok_or(MyError::InvalidPathError("invalid path".to_string()))
@@ -84,9 +95,16 @@ async fn main() -> Result<()> {
                     //     path.to_str().unwrap()
                     // ));
                 }
+                _ => {}
             }
             println!("digest: {:?}", HEXUPPER.encode(digest.unwrap().as_ref()));
             println!("dpx_digest: {:?}", dpx_digest(&mut buff));
+        }
+        Sub::Test { path } => {
+            println!("test");
+            let mut cal = calc(Path::new("./"))?;
+            sort_calc(&mut cal);
+            println!("{:?}", cal);
         }
     };
     // list_directory("/");
