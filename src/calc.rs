@@ -8,7 +8,7 @@ use std::path::Path;
 
 pub fn sort_calc(hashmap: &mut DatetimeExtnameDigests) {
     for (date, exts) in hashmap {
-        for ext in exts {
+        for mut ext in &mut exts.ext_name_digests {
             for (ex, name_digests) in ext {
                 name_digests.sort_by(|a, b| (a.0).partial_cmp(&b.0).unwrap())
             }
@@ -18,19 +18,35 @@ pub fn sort_calc(hashmap: &mut DatetimeExtnameDigests) {
 
 type NameDigest = (String, String);
 type ExtNameDigests = HashMap<Extension, Vec<NameDigest>>;
-type DatetimeExtnameDigests = HashMap<String, Vec<ExtNameDigests>>;
+#[derive(Debug)]
+pub struct SumExtNameDigests {
+    ext_name_digests: Vec<ExtNameDigests>,
+    sum: u32,
+}
+impl SumExtNameDigests {
+    fn new() -> Self {
+        SumExtNameDigests {
+            ext_name_digests: Vec::new(),
+            sum: 0,
+        }
+    }
+}
+type DatetimeExtnameDigests = HashMap<String, SumExtNameDigests>;
 
 // pub fn calc(path: &Path) -> Result<HashMap<String, Vec<HashMap<Extension, Vec<String>>>>> {
-pub fn calc(path: &Path) -> Result<DatetimeExtnameDigests> {
+pub fn calc(path: &Path, hashmap: &mut DatetimeExtnameDigests) -> Result<()> {
     if !path.is_dir() {
         Err(anyhow::anyhow!("not directory"))?
     }
 
-    let mut hashmap: DatetimeExtnameDigests = HashMap::new();
+    // let mut hashmap: DatetimeExtnameDigests = HashMap::new();
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         match entry.path().is_dir() {
-            true => hashmap.extend(calc(&entry.path())?),
+            true => {
+                // hashmap.extend(calc(&entry.path())?);
+                calc(&entry.path(), hashmap);
+            }
             false => {
                 let path = &entry.path();
                 let ext = Extension::from_path(&path);
@@ -58,11 +74,12 @@ pub fn calc(path: &Path) -> Result<DatetimeExtnameDigests> {
                     .to_string();
                 let name_digest: NameDigest = (filename, digest);
                 match hashmap.get_mut(&dtime) {
-                    Some(exts) => {
-                        for e in exts {
+                    Some(sum_exts) => {
+                        for e in &mut sum_exts.ext_name_digests {
                             match e.get_mut(&ext) {
-                                Some(filenames) => {
-                                    filenames.push(name_digest);
+                                Some(name_digests) => {
+                                    name_digests.push(name_digest);
+                                    sum_exts.sum = sum_exts.sum + 1;
                                     break;
                                 }
                                 None => {}
@@ -80,11 +97,17 @@ pub fn calc(path: &Path) -> Result<DatetimeExtnameDigests> {
                             }
                             Extension::Other => {}
                         }
-                        hashmap.insert(dtime, vec![map]);
+                        hashmap.insert(
+                            dtime,
+                            SumExtNameDigests {
+                                ext_name_digests: vec![map],
+                                sum: 1,
+                            },
+                        );
                     }
                 }
             }
         }
     }
-    Ok(hashmap)
+    Ok(())
 }

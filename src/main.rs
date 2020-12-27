@@ -6,6 +6,7 @@ use my_dropbox_controller::dropbox::{get_file_metadata, list_directory, upload_f
 use my_dropbox_controller::extension::Extension;
 use my_dropbox_controller::meta::{get_datetime, get_mp4_datetime};
 use my_dropbox_controller::sqlite::reset_db as sqlite_reset_db;
+use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -115,9 +116,10 @@ async fn main() -> Result<()> {
         }
         Sub::Test { path } => {
             println!("test");
-            let mut cal = calc(Path::new("./"))?;
-            sort_calc(&mut cal);
-            println!("{:?}", cal);
+            let mut init = HashMap::new();
+            calc(&path, &mut init)?;
+            sort_calc(&mut init);
+            println!("{:?}", init);
         }
     };
     // list_directory("/");
