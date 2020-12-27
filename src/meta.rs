@@ -18,11 +18,7 @@ enum MetaError {
     ParseDateTimeError(String),
 }
 
-pub fn datetime(path: &Path) -> Result<ChronoDateTime<Tz>> {
-    let ext = Extension::from_path(&path)?;
-    let mut file =
-        File::open(&path).with_context(|| format!("failed to open file: {:?}", path.to_str()))?;
-    let mut buff = BufReader::new(&file);
+pub fn datetime(mut buff: &mut BufReader<&File>, ext: &Extension) -> Result<ChronoDateTime<Tz>> {
     match ext {
         Extension::Jpeg => get_datetime(&mut buff),
         Extension::Mp4 => get_mp4_datetime(&mut buff),
