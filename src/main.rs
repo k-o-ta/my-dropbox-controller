@@ -14,6 +14,7 @@ use std::path::Path;
 use std::str::FromStr;
 use structopt::StructOpt;
 use thiserror::Error;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(StructOpt)]
 struct Cli {
@@ -58,8 +59,13 @@ async fn reset_db() -> Result<()> {
     Ok(())
 }
 
-fn upload(path: &Path) {
+fn upload(path: &Path) -> Result<()> {
     println!("upload");
+    let mut init = HashMap::new();
+    calc(&path, &mut init)?;
+    sort_calc(&mut init);
+    println!("{:?}", init);
+    Ok(())
 }
 fn get_metadata(path: &Path) -> Result<()> {
     println!("meta");
@@ -100,6 +106,17 @@ fn get_metadata(path: &Path) -> Result<()> {
     println!("dpx_digest: {:?}", dpx_digest(&mut buff));
     Ok(())
 }
+fn sp(tx: Sender<i32>) {
+    let tx2 = tx.clone();
+    tokio::spawn(async move {
+        tx.send(1).await;
+        println!("spawn 1");
+        tokio::spawn(async move {
+            println!("spawn 2");
+            tx2.send(2).await;
+        });
+    });
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -116,10 +133,14 @@ async fn main() -> Result<()> {
         }
         Sub::Test { path } => {
             println!("test");
-            let mut init = HashMap::new();
-            calc(&path, &mut init)?;
-            sort_calc(&mut init);
-            println!("{:?}", init);
+            let (mut tx, mut rx): (Sender<i32>, Receiver<i32>) = channel(32);
+            sp(tx);
+            while let Some(message) = rx.recv().await {
+                println!("received: {}", message);
+                if message == 2 {
+                    break;
+                }
+            }
         }
     };
     // list_directory("/");
