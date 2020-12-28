@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use data_encoding::HEXUPPER;
-use my_dropbox_controller::calc::{calc, sort_calc};
+use my_dropbox_controller::calc::{calc, calc_starter, sort_calc};
 use my_dropbox_controller::digest::{dpx_digest, sha_256_digest};
 use my_dropbox_controller::dropbox::{get_file_metadata, list_directory, upload_file};
 use my_dropbox_controller::extension::Extension;
@@ -59,10 +59,9 @@ async fn reset_db() -> Result<()> {
     Ok(())
 }
 
-fn upload(path: &Path) -> Result<()> {
+async fn upload(path: &Path) -> Result<()> {
     println!("upload");
-    let mut init = HashMap::new();
-    calc(&path, &mut init)?;
+    let mut init = calc_starter(&path).await?;
     sort_calc(&mut init);
     println!("{:?}", init);
     Ok(())
@@ -117,6 +116,12 @@ fn sp(tx: Sender<i32>) {
         });
     });
 }
+async fn sp2() {
+    println!("sp2-0");
+    let ans = tokio::spawn(async { println!("sp2-1") });
+    println!("sp2-2");
+    tokio::join!(ans);
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -126,12 +131,13 @@ async fn main() -> Result<()> {
             reset_db();
         }
         Sub::Upload { path } => {
-            upload(&path);
+            upload(&path).await;
         }
         Sub::Meta { path } => {
             get_metadata(&path);
         }
         Sub::Test { path } => {
+            sp2().await;
             println!("test");
             let (mut tx, mut rx): (Sender<i32>, Receiver<i32>) = channel(32);
             sp(tx);
