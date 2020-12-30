@@ -20,6 +20,7 @@ dropbox-content-hasher = "0.3.0"
 parallel_reader = "0.1.1"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
+async-recursion = "0.3.1"
 
 [dependencies.dropbox-sdk]
 version = "*"

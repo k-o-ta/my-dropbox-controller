@@ -260,3 +260,7 @@ pub fn upload_file(mut source_file: File, dest_path: String) -> Result<()> {
     files::upload_session_finish(client.as_ref(), &finish, &[]);
     Ok(())
 }
+
+// pub fn upload_file2(path: &Path, client, rx) {
+//
+// }

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use data_encoding::HEXUPPER;
-use my_dropbox_controller::calc::{calc, calc_starter, sort_calc};
+use my_dropbox_controller::calc::{calc, calc_starter, runner, sort_calc, sum_calc};
 use my_dropbox_controller::digest::{dpx_digest, sha_256_digest};
 use my_dropbox_controller::dropbox::{get_file_metadata, list_directory, upload_file};
 use my_dropbox_controller::extension::Extension;
@@ -61,9 +61,11 @@ async fn reset_db() -> Result<()> {
 
 async fn upload(path: &Path) -> Result<()> {
     println!("upload");
-    let mut init = calc_starter(&path).await?;
+    // let mut init = calc_starter(&path).await?;
+    let mut init = runner(&path).await?;
     sort_calc(&mut init);
     println!("{:?}", init);
+    println!("sum: {}", sum_calc(&init));
     Ok(())
 }
 fn get_metadata(path: &Path) -> Result<()> {

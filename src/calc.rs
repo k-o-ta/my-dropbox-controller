@@ -1,5 +1,8 @@
 use crate::{digest::dpx_digest, extension::Extension, meta::datetime};
 use anyhow::{Context, Result};
+use async_recursion::async_recursion;
+use chrono::{Date, DateTime, Local, Utc};
+use chrono::{Duration, NaiveDateTime};
 use futures::future::join_all;
 use std::collections::HashMap;
 use std::fs;
@@ -7,12 +10,16 @@ use std::fs::File;
 use std::io::BufReader;
 use std::ops::Add;
 use std::path::Path;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub fn sort_calc(hashmap: &mut DatetimeExtnameDigests) {
     for (date, exts) in hashmap {
         exts.pic.sort_by(|a, b| (a.0).partial_cmp(&b.0).unwrap());
         exts.mov.sort_by(|a, b| (a.0).partial_cmp(&b.0).unwrap());
     }
+}
+pub fn sum_calc(hashmap: &DatetimeExtnameDigests) -> u32 {
+    hashmap.iter().fold(0, |acc, (date, exts)| acc + exts.sum)
 }
 
 type NameDigest = (String, String);
@@ -45,6 +52,177 @@ impl Add<SumNameDigests> for SumNameDigests {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum CalcMessage {
+    Finish(i32),
+    File(String),
+}
+pub async fn runner(path: &Path) -> Result<DatetimeExtnameDigests> {
+    println!("calc start: {:?}", path);
+    if !path.is_dir() {
+        Err(anyhow::anyhow!("not directory"))?
+    }
+    let (mut tx, mut rx) = channel(32);
+    // println!("accm1: path:{:?}", path);
+    let con = tokio::spawn(async move { controller(rx).await });
+    accm(path, tx.clone(), false).await;
+
+    con.await?
+    // con.
+    // tokio::join!(con).0
+}
+
+async fn controller(mut rx: Receiver<CalcMessage>) -> Result<(DatetimeExtnameDigests)> {
+    let max = 100;
+    let mut total = None;
+    let mut this_total = 0;
+    let mut v = Vec::with_capacity(max);
+    let mut ret = Vec::new();
+    println!("controlle");
+    while let Some(message) = rx.recv().await {
+        // println!("receive");
+        match message {
+            CalcMessage::Finish(t) => {
+                total = Some(t);
+                break;
+            }
+            CalcMessage::File(path) => {
+                this_total = this_total + 1;
+                v.push(path);
+            }
+        }
+        if v.len() >= max {
+            // println!("controlle over");
+            let v2 = v.clone();
+            ret.push(tokio::spawn(async move { calc2(v2) }));
+            v.clear();
+        }
+        match total {
+            Some(t) => {
+                if t == this_total {
+                    break;
+                }
+            }
+            None => {}
+        }
+    }
+    let results = futures::future::join_all(ret).await;
+    let mut hashmap: DatetimeExtnameDigests = HashMap::new();
+    for dir in results {
+        let result = dir?;
+        for _result in result {
+            for (datetime, sum_name_digest_result) in _result {
+                match hashmap.get_mut(&datetime) {
+                    Some(sum_name_digest) => sum_name_digest.merge(sum_name_digest_result),
+                    None => {
+                        hashmap.insert(datetime, sum_name_digest_result);
+                    }
+                }
+            }
+        }
+    }
+    Ok(hashmap)
+}
+
+#[async_recursion]
+async fn accm(path: &Path, mut tx: Sender<CalcMessage>, rec: bool) -> Result<(i32)> {
+    println!("accm: path{:?}", path);
+    let mut sum = 0;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        match entry_path.is_dir() {
+            true => {
+                sum = sum + accm(&entry_path, tx.clone(), true).await?;
+            }
+            false => {
+                match Extension::from_path(&entry_path) {
+                    Ok(ext) => match ext {
+                        Extension::Jpeg | Extension::Mp4 => ext,
+                        Extension::Other => continue,
+                    },
+                    Err(_) => {
+                        continue;
+                    }
+                };
+                // println!("send: {:?}", entry_path);
+                tx.send(CalcMessage::File(entry_path.display().to_string()))
+                    .await;
+                sum = sum + 1;
+                // .await;
+            }
+        }
+    }
+    if !rec {
+        tx.send(CalcMessage::Finish(sum)).await;
+    }
+    // println!("accm: path{:?}", path);
+    Ok(sum)
+}
+
+pub fn calc2(paths: Vec<String>) -> Result<DatetimeExtnameDigests> {
+    let start_time: DateTime<Local> = Local::now();
+    println!("thread start: {}", start_time);
+    let mut hashmap: DatetimeExtnameDigests = HashMap::new();
+    for path in paths {
+        let path = Path::new(&path);
+        let ext = match Extension::from_path(&path) {
+            Ok(ext) => match ext {
+                Extension::Jpeg | Extension::Mp4 => ext,
+                Extension::Other => continue,
+            },
+            Err(_) => {
+                continue;
+            }
+        };
+        let mut file = File::open(&path)
+            .with_context(|| format!("failed to open file: {:?}", path.to_str()))?;
+        let mut buff = BufReader::new(&file);
+        let dtime = datetime(&mut buff, &ext)?.to_string();
+        let digest = dpx_digest(&mut buff)?;
+        let filename = path.display().to_string();
+        let name_digest: NameDigest = (filename, digest);
+        match hashmap.get_mut(&dtime) {
+            Some(sum_exts) => match ext {
+                Extension::Jpeg => {
+                    sum_exts.pic.push(name_digest);
+                    sum_exts.sum = sum_exts.sum + 1;
+                }
+                Extension::Mp4 => {
+                    sum_exts.mov.push(name_digest);
+                    sum_exts.sum = sum_exts.sum + 1;
+                }
+                Extension::Other => {}
+            },
+            None => {
+                let mut map: ExtNameDigests = HashMap::new();
+                let sum_name_digests = match ext {
+                    Extension::Jpeg => SumNameDigests {
+                        pic: vec![name_digest],
+                        mov: Vec::new(),
+                        sum: 1,
+                    },
+                    Extension::Mp4 => SumNameDigests {
+                        mov: vec![name_digest],
+                        pic: Vec::new(),
+                        sum: 1,
+                    },
+                    Extension::Other => SumNameDigests::default(),
+                };
+                hashmap.insert(dtime, sum_name_digests);
+            }
+        }
+    }
+    let end_time: DateTime<Local> = Local::now();
+    println!(
+        "thread finish: {}, duration: {}",
+        start_time,
+        (end_time - start_time).num_seconds()
+    );
+    Ok(hashmap)
+}
+
 type DatetimeExtnameDigests = HashMap<String, SumNameDigests>;
 pub async fn calc_starter(path: &Path) -> Result<DatetimeExtnameDigests> {
     println!("calc start: {:?}", path);
