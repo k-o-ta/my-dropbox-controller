@@ -86,3 +86,16 @@ fn insert(conn: &Connection, data: &FileData) -> Result<()> {
     )?;
     Ok(())
 }
+
+pub fn exist(con: &Connection, hash: String) -> Result<bool> {
+    let mut stmt = con.prepare("SELECT name FROM files WHERE hash = ?")?;
+    match stmt.exists(&[hash]) {
+        SqResult::Ok(b) => Ok(b),
+        SqResult::Err(e) => Err(anyhow::anyhow!(e)),
+    }
+}
+
+pub fn connection(path: &str) -> Result<Connection> {
+    let conn = Connection::open(&path)?;
+    Ok(conn)
+}

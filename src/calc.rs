@@ -14,21 +14,29 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub fn sort_calc(hashmap: &mut DatetimeExtnameDigests) {
     for (date, exts) in hashmap {
-        exts.pic.sort_by(|a, b| (a.0).partial_cmp(&b.0).unwrap());
-        exts.mov.sort_by(|a, b| (a.0).partial_cmp(&b.0).unwrap());
+        exts.pic
+            .sort_by(|a, b| (a.name).partial_cmp(&b.name).unwrap());
+        exts.mov
+            .sort_by(|a, b| (a.name).partial_cmp(&b.name).unwrap());
     }
 }
 pub fn sum_calc(hashmap: &DatetimeExtnameDigests) -> u32 {
     hashmap.iter().fold(0, |acc, (date, exts)| acc + exts.sum)
 }
 
-type NameDigest = (String, String);
+// type NameDigest = (String, String);
+#[derive(Debug)]
+pub struct NameDigest {
+    pub digest: String,
+    pub name: String,
+    pub path: String,
+}
 type ExtNameDigests = HashMap<Extension, Vec<NameDigest>>;
 #[derive(Debug, Default)]
 pub struct SumNameDigests {
-    pic: Vec<NameDigest>,
-    mov: Vec<NameDigest>,
-    sum: u32,
+    pub pic: Vec<NameDigest>,
+    pub mov: Vec<NameDigest>,
+    pub sum: u32,
 }
 impl SumNameDigests {
     fn merge(&mut self, mut other: Self) {
@@ -85,7 +93,7 @@ async fn controller(mut rx: Receiver<CalcMessage>) -> Result<(DatetimeExtnameDig
         match message {
             CalcMessage::Finish(t) => {
                 total = Some(t);
-                break;
+                // break;
             }
             CalcMessage::File(path) => {
                 this_total = this_total + 1;
@@ -93,7 +101,7 @@ async fn controller(mut rx: Receiver<CalcMessage>) -> Result<(DatetimeExtnameDig
             }
         }
         if v.len() >= max {
-            // println!("controlle over");
+            println!("controlle over");
             let v2 = v.clone();
             ret.push(tokio::spawn(async move { calc2(v2) }));
             v.clear();
@@ -101,6 +109,8 @@ async fn controller(mut rx: Receiver<CalcMessage>) -> Result<(DatetimeExtnameDig
         match total {
             Some(t) => {
                 if t == this_total {
+                    let v2 = v.clone();
+                    ret.push(tokio::spawn(async move { calc2(v2) }));
                     break;
                 }
             }
@@ -181,8 +191,19 @@ pub fn calc2(paths: Vec<String>) -> Result<DatetimeExtnameDigests> {
         let mut buff = BufReader::new(&file);
         let dtime = datetime(&mut buff, &ext)?.to_string();
         let digest = dpx_digest(&mut buff)?;
-        let filename = path.display().to_string();
-        let name_digest: NameDigest = (filename, digest);
+        let path_string = path.display().to_string();
+        let filename = path
+            .file_name()
+            .ok_or(anyhow::anyhow!("filename error1"))
+            .and_then(|n| n.to_str().ok_or(anyhow::anyhow!("filename error2")))?
+            .to_string();
+
+        // let name_digest: NameDigest = (filename, digest);
+        let name_digest: NameDigest = NameDigest {
+            digest: digest,
+            path: path_string,
+            name: filename,
+        };
         match hashmap.get_mut(&dtime) {
             Some(sum_exts) => match ext {
                 Extension::Jpeg => {
@@ -223,7 +244,7 @@ pub fn calc2(paths: Vec<String>) -> Result<DatetimeExtnameDigests> {
     Ok(hashmap)
 }
 
-type DatetimeExtnameDigests = HashMap<String, SumNameDigests>;
+pub type DatetimeExtnameDigests = HashMap<String, SumNameDigests>;
 pub async fn calc_starter(path: &Path) -> Result<DatetimeExtnameDigests> {
     println!("calc start: {:?}", path);
     if !path.is_dir() {
@@ -257,12 +278,18 @@ pub async fn calc_starter(path: &Path) -> Result<DatetimeExtnameDigests> {
                 let mut buff = BufReader::new(&file);
                 let dtime = datetime(&mut buff, &ext)?.to_string();
                 let digest = dpx_digest(&mut buff)?;
+                let path_string = path.display().to_string();
                 let filename = path
                     .file_name()
                     .ok_or(anyhow::anyhow!("filename error1"))
                     .and_then(|n| n.to_str().ok_or(anyhow::anyhow!("filename error2")))?
                     .to_string();
-                let name_digest: NameDigest = (filename, digest);
+                // let name_digest: NameDigest = (filename, digest);
+                let name_digest: NameDigest = NameDigest {
+                    name: filename,
+                    path: path_string,
+                    digest: digest,
+                };
                 match hashmap.get_mut(&dtime) {
                     Some(sum_exts) => match ext {
                         Extension::Jpeg => {
@@ -361,12 +388,18 @@ pub fn calc(path: &Path) -> Result<DatetimeExtnameDigests> {
                 let mut buff = BufReader::new(&file);
                 let dtime = datetime(&mut buff, &ext)?.to_string();
                 let digest = dpx_digest(&mut buff)?;
+                let path_string = path.display().to_string();
                 let filename = path
                     .file_name()
                     .ok_or(anyhow::anyhow!("filename error1"))
                     .and_then(|n| n.to_str().ok_or(anyhow::anyhow!("filename error2")))?
                     .to_string();
-                let name_digest: NameDigest = (filename, digest);
+                // let name_digest: NameDigest = (filename, digest);
+                let name_digest: NameDigest = NameDigest {
+                    name: filename,
+                    path: path_string,
+                    digest: digest,
+                };
                 match hashmap.get_mut(&dtime) {
                     Some(sum_exts) => match ext {
                         Extension::Jpeg => {

@@ -2,7 +2,9 @@ use anyhow::{Context, Result};
 use data_encoding::HEXUPPER;
 use my_dropbox_controller::calc::{calc, calc_starter, runner, sort_calc, sum_calc};
 use my_dropbox_controller::digest::{dpx_digest, sha_256_digest};
-use my_dropbox_controller::dropbox::{get_file_metadata, list_directory, upload_file};
+use my_dropbox_controller::dropbox::{
+    get_file_metadata, list_directory, upload_file, upload_files,
+};
 use my_dropbox_controller::extension::Extension;
 use my_dropbox_controller::meta::{get_datetime, get_mp4_datetime};
 use my_dropbox_controller::sqlite::reset_db as sqlite_reset_db;
@@ -64,8 +66,12 @@ async fn upload(path: &Path) -> Result<()> {
     // let mut init = calc_starter(&path).await?;
     let mut init = runner(&path).await?;
     sort_calc(&mut init);
-    println!("{:?}", init);
+    // println!("{:?}", init);
     println!("sum: {}", sum_calc(&init));
+    // println!("{:?}", upload_files(init).await?);
+    // upload_files(init).await?;
+    println!("ok?");
+
     Ok(())
 }
 fn get_metadata(path: &Path) -> Result<()> {

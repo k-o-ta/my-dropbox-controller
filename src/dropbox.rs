@@ -1,4 +1,6 @@
 use anyhow::Result;
+use chrono::{Date, DateTime, Local, Utc};
+use chrono::{Duration, NaiveDateTime};
 use dropbox_sdk::default_client::{NoauthDefaultClient, UserAuthDefaultClient};
 use dropbox_sdk::oauth2::{
     oauth2_token_from_authorization_code, Oauth2AuthorizeUrlBuilder, Oauth2Type,
@@ -7,11 +9,16 @@ use dropbox_sdk::{files, UserAuthClient};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use {
-    crate::sqlite::Message,
+    crate::{
+        calc::{DatetimeExtnameDigests, SumNameDigests},
+        sqlite::{connection, exist, Message},
+    },
+    dropbox_sdk::dbx_async,
     dropbox_sdk::files::{FileMetadata, ListFolderResult, Metadata},
 };
 
@@ -261,6 +268,175 @@ pub fn upload_file(mut source_file: File, dest_path: String) -> Result<()> {
     Ok(())
 }
 
-// pub fn upload_file2(path: &Path, client, rx) {
-//
-// }
+pub async fn upload_files(files: DatetimeExtnameDigests) -> Result<()> {
+    println!("upload start");
+    let client = Arc::new(UserAuthDefaultClient::new(get_oauth2_token()));
+    let max = 1000;
+    let mut sum = 0;
+    let mut threads = Vec::new();
+    let mut path_names = Vec::new();
+    let conn = connection("my-dropbox.db3")?;
+
+    for (datetime, datetime_files) in files {
+        println!("1, len: {}", path_names.len());
+        sum = sum + datetime_files.sum;
+        if sum <= max {
+            println!("2");
+            let mut count = 0;
+            for pic in datetime_files.pic {
+                if exist(&conn, pic.digest)? {
+                    continue;
+                }
+                let name = if count != 0 {
+                    format!("{}_{}.JPG", datetime, count)
+                } else {
+                    format!("{}.JPG", datetime)
+                };
+                path_names.push((pic.path, name));
+                count = count + 1;
+            }
+            let mut count = 0;
+            for mov in datetime_files.mov {
+                if exist(&conn, mov.digest)? {
+                    continue;
+                }
+                let name = if count != 0 {
+                    format!("{}_{}.MP4", datetime, count)
+                } else {
+                    format!("{}.MP4", datetime)
+                };
+                path_names.push((mov.path, name));
+                count = count + 1;
+            }
+        } else {
+            println!("3");
+            let cloned = path_names.clone();
+            let cloned_client = client.clone();
+            threads.push(tokio::spawn(async move {
+                upload_files2(cloned, cloned_client).await
+            }));
+            path_names.clear();
+        }
+    }
+    threads.push(tokio::spawn(async move {
+        upload_files2(path_names, client).await
+    }));
+    println!("4");
+    let finishes = futures::future::join_all(threads).await;
+    println!("5");
+    Ok(())
+}
+enum UploadMessage {
+    Cont((String, SumNameDigests)),
+    Finish(u32),
+}
+
+async fn upload_files2(
+    path_names: Vec<(String, String)>,
+    client: Arc<UserAuthDefaultClient>,
+) -> Result<()> {
+    let start_time: DateTime<Local> = Local::now();
+    println!(
+        "upload thread start: {}, len: {}",
+        start_time,
+        path_names.len()
+    );
+    let mut threads = Vec::new();
+    for (path, name) in path_names {
+        let cloned = client.clone();
+        println!("thread spawn");
+        threads.push(tokio::spawn(
+            async move { upload_file2(&path, &name, cloned) },
+        ));
+    }
+    let finishes = futures::future::join_all(threads).await;
+    let mut v: Vec<files::UploadSessionFinishArg> = Vec::new();
+    for finish in finishes {
+        match finish {
+            Ok(Ok(f)) => v.push(f),
+            Ok(Err(e)) => {
+                println!("OK Error: {}", e)
+            }
+            Err(e) => {
+                println!("Error: {}", e)
+            }
+        }
+    }
+    let finish_batch_arg = files::UploadSessionFinishBatchArg::new(v);
+    match files::upload_session_finish_batch(client.as_ref(), &finish_batch_arg) {
+        Ok(Ok(res)) => match res {
+            files::UploadSessionFinishBatchLaunch::AsyncJobId(async_job_id) => {
+                let poll_arg = dbx_async::PollArg::new(async_job_id);
+                loop {
+                    match files::upload_session_finish_batch_check(client.as_ref(), &poll_arg) {
+                        Ok(Ok(res)) => match res {
+                            files::UploadSessionFinishBatchJobStatus::InProgress => {
+                                println!("batch check inprogress");
+                            }
+                            files::UploadSessionFinishBatchJobStatus::Complete(_) => {
+                                println!("batch check complete");
+                                break;
+                            }
+                        },
+                        Ok(Err(e)) => {
+                            println!("batch check ok err: {}", e);
+                            break;
+                        }
+                        Err(e) => {
+                            println!("batch check err: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+            files::UploadSessionFinishBatchLaunch::Complete(_) => {
+                println!("upload batch finish");
+            }
+            _ => {}
+        },
+        Ok(Err(e)) => println!("Finish batch Ok Err : {}", e),
+        Err(e) => println!("Finish batch Err : {}", e),
+    }
+    let end_time: DateTime<Local> = Local::now();
+    println!(
+        "upload thread finish: {}, duration: {}",
+        start_time,
+        (end_time - start_time).num_seconds()
+    );
+    Ok(())
+}
+
+pub fn upload_file2(
+    path: &String,
+    name: &String,
+    client: Arc<UserAuthDefaultClient>,
+) -> Result<files::UploadSessionFinishArg> {
+    let mut source_file = File::open(Path::new(&path))?;
+    let source_len = source_file.metadata()?.len();
+    let mut session = UploadSession::new(&client, source_len)?;
+    let session_id = session.session_id.clone();
+    let start_offset = session.start_offset;
+    // let cloned_client = client.clone();
+    println!("-------upload session ID is {}", session.session_id);
+    let result = parallel_reader::read_stream_and_process_chunks_in_parallel(
+        &mut source_file,
+        BLOCK_SIZE,
+        PARALLELISM,
+        Arc::new(move |block_offset, data: &[u8]| -> Result<()> {
+            let mut append = files::UploadSessionAppendArg::new(files::UploadSessionCursor::new(
+                session_id.clone(),
+                start_offset + block_offset,
+            ));
+            if data.len() != BLOCK_SIZE {
+                append.close = true;
+            }
+            files::upload_session_append_v2(client.as_ref(), &append, data);
+            Ok(())
+        }),
+    );
+    let finish = files::UploadSessionFinishArg::new(
+        files::UploadSessionCursor::new(session.session_id.clone(), source_len),
+        files::CommitInfo::new(format!("/カメラアップロード/{}", name)),
+    );
+    Ok(finish)
+}
