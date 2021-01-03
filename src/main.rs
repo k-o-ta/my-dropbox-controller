@@ -69,7 +69,7 @@ async fn upload(path: &Path) -> Result<()> {
     // println!("{:?}", init);
     println!("sum: {}", sum_calc(&init));
     // println!("{:?}", upload_files(init).await?);
-    // upload_files(init).await?;
+    upload_files(init).await?;
     println!("ok?");
 
     Ok(())

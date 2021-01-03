@@ -316,6 +316,33 @@ pub async fn upload_files(files: DatetimeExtnameDigests) -> Result<()> {
                 upload_files2(cloned, cloned_client).await
             }));
             path_names.clear();
+            let mut count = 0;
+            for pic in datetime_files.pic {
+                if exist(&conn, pic.digest)? {
+                    continue;
+                }
+                let name = if count != 0 {
+                    format!("{}_{}.JPG", datetime, count)
+                } else {
+                    format!("{}.JPG", datetime)
+                };
+                path_names.push((pic.path, name));
+                count = count + 1;
+            }
+            let mut count = 0;
+            for mov in datetime_files.mov {
+                if exist(&conn, mov.digest)? {
+                    continue;
+                }
+                let name = if count != 0 {
+                    format!("{}_{}.MP4", datetime, count)
+                } else {
+                    format!("{}.MP4", datetime)
+                };
+                path_names.push((mov.path, name));
+                count = count + 1;
+            }
+            sum = datetime_files.sum;
         }
     }
     threads.push(tokio::spawn(async move {
