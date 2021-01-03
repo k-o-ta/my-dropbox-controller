@@ -189,7 +189,9 @@ pub fn calc2(paths: Vec<String>) -> Result<DatetimeExtnameDigests> {
         let mut file = File::open(&path)
             .with_context(|| format!("failed to open file: {:?}", path.to_str()))?;
         let mut buff = BufReader::new(&file);
-        let dtime = datetime(&mut buff, &ext)?.to_string();
+        let dtime = datetime(&mut buff, &ext)?
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
         let digest = dpx_digest(&mut buff)?;
         let path_string = path.display().to_string();
         let filename = path

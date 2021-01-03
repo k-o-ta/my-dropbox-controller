@@ -288,9 +288,9 @@ pub async fn upload_files(files: DatetimeExtnameDigests) -> Result<()> {
                     continue;
                 }
                 let name = if count != 0 {
-                    format!("{}_{}.JPG", datetime, count)
+                    format!("{}_{}.jpg", datetime, count)
                 } else {
-                    format!("{}.JPG", datetime)
+                    format!("{}.jpg", datetime)
                 };
                 path_names.push((pic.path, name));
                 count = count + 1;
@@ -301,9 +301,9 @@ pub async fn upload_files(files: DatetimeExtnameDigests) -> Result<()> {
                     continue;
                 }
                 let name = if count != 0 {
-                    format!("{}_{}.MP4", datetime, count)
+                    format!("{}_{}.mp4", datetime, count)
                 } else {
-                    format!("{}.MP4", datetime)
+                    format!("{}.mp4", datetime)
                 };
                 path_names.push((mov.path, name));
                 count = count + 1;
@@ -322,9 +322,9 @@ pub async fn upload_files(files: DatetimeExtnameDigests) -> Result<()> {
                     continue;
                 }
                 let name = if count != 0 {
-                    format!("{}_{}.JPG", datetime, count)
+                    format!("{}_{}.jpg", datetime, count)
                 } else {
-                    format!("{}.JPG", datetime)
+                    format!("{}.jpg", datetime)
                 };
                 path_names.push((pic.path, name));
                 count = count + 1;
@@ -335,9 +335,9 @@ pub async fn upload_files(files: DatetimeExtnameDigests) -> Result<()> {
                     continue;
                 }
                 let name = if count != 0 {
-                    format!("{}_{}.MP4", datetime, count)
+                    format!("{}_{}.mp4", datetime, count)
                 } else {
-                    format!("{}.MP4", datetime)
+                    format!("{}.mp4", datetime)
                 };
                 path_names.push((mov.path, name));
                 count = count + 1;
