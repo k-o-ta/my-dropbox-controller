@@ -9,6 +9,7 @@ use dropbox_sdk::{files, UserAuthClient};
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
@@ -29,7 +30,8 @@ const PARALLELISM: usize = 20;
 const BLOCK_SIZE: usize = 4 * 1024 * 1024;
 
 pub fn list_directory2(path: &str, tx: Sender<Message>) {
-    let client = UserAuthDefaultClient::new(get_oauth2_token());
+    // let client = UserAuthDefaultClient::new(get_oauth2_token());
+    let client = UserAuthDefaultClient::new(oauth2());
     let requested_path = if path == "/" {
         String::new()
     } else {
@@ -38,7 +40,7 @@ pub fn list_directory2(path: &str, tx: Sender<Message>) {
     let mut count = 0;
     match files::list_folder(
         &client,
-        &files::ListFolderArg::new(requested_path).with_recursive(false),
+        &files::ListFolderArg::new(requested_path).with_recursive(true),
     ) {
         Ok(Ok(ListFolderResult {
             entries,
@@ -78,7 +80,7 @@ pub fn list_directory2(path: &str, tx: Sender<Message>) {
             let mut new_cursor = cursor;
 
             loop {
-                println!("fetch count: {}", count);
+                // println!("fetch count: {}", count);
                 match files::list_folder_continue(
                     &client,
                     &files::ListFolderContinueArg::new(new_cursor),
@@ -190,6 +192,43 @@ pub fn get_file_metadata(path: &str) {
 
 pub fn get_oauth2_token() -> String {
     env::var("DBX_OAUTH_TOKEN").unwrap()
+}
+pub fn oauth2() -> String {
+    let client_id = env::var("DBX_API_APP_KEY").expect("need API APP KEY");
+    let client_secret = env::var("DBX_API_APP_SECRET").expect("need API APP SECRET");
+    let url = Oauth2AuthorizeUrlBuilder::new(&client_id, Oauth2Type::AuthorizationCode).build();
+    eprintln!("Open this URL in your browser:");
+    eprintln!("{}", url);
+    eprintln!();
+    let auth_code = prompt("Then paste the code here");
+
+    eprintln!("requesting OAuth2 token");
+
+    match oauth2_token_from_authorization_code(
+        NoauthDefaultClient::default(),
+        &client_id,
+        &client_secret,
+        auth_code.trim(),
+        None,
+    ) {
+        Ok(token) => {
+            eprintln!("got token: {}", token);
+
+            token
+        }
+        Err(e) => {
+            eprintln!("Error getting OAuth2 token: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn prompt(msg: &str) -> String {
+    eprint!("{}: ", msg);
+    io::stderr().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    input.trim().to_owned()
 }
 
 #[derive(Debug)]

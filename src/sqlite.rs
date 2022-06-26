@@ -1,4 +1,4 @@
-use crate::dropbox::{get_oauth2_token, list_directory2};
+use crate::dropbox::{get_oauth2_token, list_directory2, oauth2};
 use anyhow::Result;
 use dropbox_sdk::default_client::UserAuthDefaultClient;
 use rusqlite::types::ToSqlOutput;
@@ -6,13 +6,13 @@ use rusqlite::{params, Connection, Result as SqResult, ToSql, NO_PARAMS};
 use std::fs;
 use tokio::sync::mpsc;
 
-pub async fn reset_db(path: &str) -> Result<()> {
+pub async fn reset_db(path: &str, source: &str) -> Result<()> {
     let _ = fs::remove_file(path);
     let conn = Connection::open(path)?;
     conn.execute(
         "CREATE TABLE files (
-            name TEXT UNIQUE,
-            hash TEXT UNIQUE
+            name TEXT,
+            hash TEXT 
             );",
         params![],
     );
@@ -33,8 +33,9 @@ pub async fn reset_db(path: &str) -> Result<()> {
     //     conn.query_row("SELECT COUNT(*) FROM files;", NO_PARAMS, |row| row.get(0));
     // println!("{:?}", result);
     let (mut tx, mut rx): (mpsc::Sender<Message>, mpsc::Receiver<Message>) = mpsc::channel(32);
-    let client = UserAuthDefaultClient::new(get_oauth2_token());
-    list_directory2("/カメラアップロード", tx);
+    // let client = UserAuthDefaultClient::new(get_oauth2_token());
+    // let client = UserAuthDefaultClient::new(oauth2());
+    list_directory2(source, tx);
     while let Some(message) = rx.recv().await {
         match message {
             Message::Finish => {}

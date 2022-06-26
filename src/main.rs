@@ -27,7 +27,7 @@ struct Cli {
 #[derive(StructOpt)]
 enum Sub {
     #[structopt(name = "reset-db", about = "reset db")]
-    ResetDb,
+    ResetDb { path: String },
     #[structopt(name = "upload", about = "upload pictures")]
     Upload {
         #[structopt(parse(from_os_str))]
@@ -53,10 +53,10 @@ enum MyError {
     InvalidExtensionString(String),
 }
 
-async fn reset_db() -> Result<()> {
+async fn reset_db(path: String) -> Result<()> {
     println!("resetDB");
-    println!("{:?}", sqlite_reset_db("my-dropbox.db3").await);
-    let mut source_file = File::open("my-dropbox.db3")?;
+    println!("{:?}", sqlite_reset_db("my-dropbox3.db3", &path).await);
+    let mut source_file = File::open("my-dropbox3.db3")?;
     upload_file(source_file, "/my-dropbox2.db3".to_string())?;
     Ok(())
 }
@@ -135,8 +135,8 @@ async fn sp2() {
 async fn main() -> Result<()> {
     let args = Cli::from_args();
     match args.sub {
-        Sub::ResetDb => {
-            reset_db();
+        Sub::ResetDb { path } => {
+            reset_db(path).await;
         }
         Sub::Upload { path } => {
             upload(&path).await;
